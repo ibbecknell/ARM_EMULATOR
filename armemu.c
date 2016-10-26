@@ -6,6 +6,7 @@
 #define STACK_SIZE 1024
 #define SP 13
 #define LR 14
+int sum_array_a(int *a, int n);
 #define PC 15
 
 int add(int a, int b);
