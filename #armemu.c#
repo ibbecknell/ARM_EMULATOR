@@ -1,0 +1,17 @@
+#include <stdbool.h>
+#include <stdio.h>
+
+#define NREGS 16
+#define STACK_SIZE 1024
+#define SP 13
+#define LR 14
+#define PC 15
+
+int add(int a, int b);
+
+struct arm_state{
+  unsigned int regs[NREGS];
+  unsigned int cpsr;
+  unsigned char stack[STACK_SIZE];
+};
+
