@@ -10,7 +10,7 @@ int sum_array_a(int *a, int n);
 #define PC 15
 
 int add(int a, int b);
-
+int sub(int a, int b);
 struct arm_state {
     unsigned int regs[NREGS];
     unsigned int cpsr;
@@ -43,6 +43,13 @@ void init_arm_state(struct arm_state *as, unsigned int *func,
     as->regs[3] = arg3;
 }
 
+bool is_sub_inst(unsigned int iw){
+  unsigned int opcode;
+
+  opcode = (iw >> 21) & 0b1111;
+  return opcode == 0b0010;
+}
+
 bool is_add_inst(unsigned int iw)
 {
     unsigned int op;
@@ -58,14 +65,20 @@ void armemu_add(struct arm_state *state)
 {
     unsigned int iw;
     unsigned int rd, rn, rm;
-
+    int i;
     iw = *((unsigned int *) state->regs[PC]);
-    
+    i = (iw >> 25) & 0b1;
+    //printf("I: %d\n", i);
     rd = (iw >> 12) & 0xF;
     rn = (iw >> 16) & 0xF;
-    rm = iw & 0xF;
+    if(i == 0){
+        rm = iw & 0xF;
+        state->regs[rd] = state->regs[rn] + state->regs[rm];
+    } else {
+      rm = iw & 0xFF;
+      state->regs[rd] = state ->regs[rn] + rm;
+    }
 
-    state->regs[rd] = state->regs[rn] + state->regs[rm];
     if (rd != PC) {
         state->regs[PC] = state->regs[PC] + 4;
     }
@@ -121,7 +134,7 @@ int main(int argc, char **argv)
     struct arm_state state;
     unsigned int r;
     
-    init_arm_state(&state, (unsigned int *) add, 1, 2, 0, 0);
+    init_arm_state(&state, (unsigned int *) sub, 1, 2, 0, 0);
     r = armemu(&state);
     printf("r = %d\n", r);
   
