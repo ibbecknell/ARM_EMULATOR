@@ -1,7 +1,14 @@
+
 #include <stdbool.h>
 #include <stdio.h>
 
-
+#define DP_op 0
+#define MEM_op 1
+#define BR_op 2
+#define uncond 14
+#define NE 1
+#define EQ 0
+#define GT 12
 #define NREGS 16
 #define STACK_SIZE 1024
 #define SP 13
@@ -9,11 +16,15 @@
 int sum_array_a(int *a, int n);
 #define PC 15
 
+int cmp(int a, int b);
 int add(int a, int b);
+int mov(void);
 int sub(int a, int b);
 struct arm_state {
     unsigned int regs[NREGS];
-    unsigned int cpsr;
+    unsigned int eq;
+    unsigned int ne;
+    unsigned int gt;
     unsigned char stack[STACK_SIZE];
 };
 
@@ -27,7 +38,9 @@ void init_arm_state(struct arm_state *as, unsigned int *func,
         as->regs[i] = 0;
     }
 
-    as->cpsr = 0;
+    as->eq = 1;
+    as->ne = 0;
+    as->gt = 0;
 
     for (i = 0; i < STACK_SIZE; i++) {
         as->stack[i] = 0;
@@ -43,45 +56,41 @@ void init_arm_state(struct arm_state *as, unsigned int *func,
     as->regs[3] = arg3;
 }
 
-bool is_sub_inst(unsigned int iw){
-  unsigned int opcode;
+unsigned int get_cond_field(unsigned int iw){
+  return (iw >> 28) & 0xF;
+}
 
-  opcode = (iw >> 21) & 0b1111;
-  return opcode == 0b0010;
+unsigned int get_inst(unsigned int iw){
+  return (iw >> 21) & 0xF;
+}
+
+int get_I_bit(unsigned int iw){
+  return (iw >> 25) & 0b1;
+}
+
+unsigned int get_Rd(unsigned int iw){
+  return (iw >> 12) & 0xF;
+}
+
+unsigned int get_Rn(unsigned int iw){
+  return (iw >> 16) & 0xF;
+}
+
+bool is_mov_inst(unsigned int iw){
+  return get_inst(iw) == 0b1101;
+}
+
+bool is_sub_inst(unsigned int iw){
+  return get_inst(iw) == 0b0010;
+}
+
+bool is_cmp_inst(unsigned int iw){
+  return get_inst(iw) == 0b1010;
 }
 
 bool is_add_inst(unsigned int iw)
 {
-    unsigned int op;
-    unsigned int opcode;
-
-    op = (iw >> 26) & 0b11;
-    opcode = (iw >> 21) & 0b1111;
-
-    return (op == 0) && (opcode == 0b0100);
-}
-
-void armemu_add(struct arm_state *state)
-{
-    unsigned int iw;
-    unsigned int rd, rn, rm;
-    int i;
-    iw = *((unsigned int *) state->regs[PC]);
-    i = (iw >> 25) & 0b1;
-    //printf("I: %d\n", i);
-    rd = (iw >> 12) & 0xF;
-    rn = (iw >> 16) & 0xF;
-    if(i == 0){
-        rm = iw & 0xF;
-        state->regs[rd] = state->regs[rn] + state->regs[rm];
-    } else {
-      rm = iw & 0xFF;
-      state->regs[rd] = state ->regs[rn] + rm;
-    }
-
-    if (rd != PC) {
-        state->regs[PC] = state->regs[PC] + 4;
-    }
+    return get_inst(iw) == 0b0100;
 }
 
 bool is_bx_inst(unsigned int iw)
@@ -91,6 +100,136 @@ bool is_bx_inst(unsigned int iw)
     bx_code = (iw >> 4) & 0x00FFFFFF;
 
     return (bx_code == 0b000100101111111111110001);
+}
+
+void clear_cpsr(struct arm_state *state){
+    state ->ne = 0;
+    state ->eq = 1;
+    state ->gt = 0;
+}
+
+bool can_proceed(struct arm_state *state, unsigned int iw){
+  unsigned int cond_field = get_cond_field(iw);
+  printf("cond_field: %d\n", cond_field);
+  printf("state ->ne: %d state->eq: %d state ->gt: %d\n",state->ne,state->eq,state->gt);
+  bool can_proceed = false;
+  if (cond_field == uncond){
+    printf("unconditional instruction\n");
+    can_proceed = true;
+  } if ((cond_field == NE) && (state->ne == NE)){
+    printf("Not equal instruction\n");
+    can_proceed = true;
+  } if((cond_field == EQ) && (state->eq == EQ)){
+        printf("Equal instruction\n");
+    can_proceed = true;
+  }  if(cond_field == state->gt){
+    printf("Greater than instruction\n");
+    can_proceed = true;
+  }
+  return can_proceed;
+}
+
+void armemu_cmp(struct arm_state *state){
+    unsigned int iw;
+    unsigned int rn, rm;
+    int i;
+    int src2;
+
+    clear_cpsr(state);
+    iw = *((unsigned int *) state->regs[PC]);
+    i = get_I_bit(iw);
+    rn = get_Rn(iw);
+
+    if(i == 0){
+         src2 = state->regs[iw & 0xF];
+    } else {
+      src2 = iw & 0xFF;
+    }
+     printf("\n Comparing %d and  %d\n",state->regs[rn],src2);
+     if(state->regs[rn] == src2){
+      state ->eq = 0;		 
+    }
+    if(state->regs[rn] > src2){
+      state ->gt = 12;
+    }
+    if(state->regs[rn] != src2){
+      state ->ne = 1;
+    }    
+    state->regs[PC] = state->regs[PC] + 4;
+}
+
+void armemu_mov(struct arm_state *state){
+    unsigned int iw;
+    unsigned int rd, rn, rm;
+    int i;
+    iw = *((unsigned int *) state->regs[PC]);
+    if(can_proceed(state,iw)){
+      //  printf("can proceed");
+    i = get_I_bit(iw);
+    rd = get_Rd(iw);
+    rn = get_Rn(iw);
+
+    if(i == 0){
+        rm = iw & 0xF;
+	printf("moving %d into r%d\n",state->regs[rm],rd);
+	state->regs[rd] = state->regs[rm];
+    } else {
+      rm = iw & 0xFF;
+	printf("moving %d into r%d\n",rm,rd);
+      state->regs[rd] = rm;
+    }
+    }
+
+    if (rd != PC) {
+        state->regs[PC] = state->regs[PC] + 4;
+    }
+}
+
+void armemu_sub(struct arm_state *state){
+    unsigned int iw;
+    unsigned int rd, rn, rm;
+    int i;
+    iw = *((unsigned int *) state->regs[PC]);
+    if(can_proceed(state,iw)){
+    i = get_I_bit(iw);
+    //printf("I: %d\n", i);
+    rd = get_Rd(iw);
+    rn = get_Rn(iw);
+    if(i == 0){
+        rm = iw & 0xF;
+        state->regs[rd] = state->regs[rn] - state->regs[rm];
+    } else {
+      int imm = iw & 0xFF;
+      state->regs[rd] = state ->regs[rn] - imm;
+    }
+    }
+    if (rd != PC) {
+        state->regs[PC] = state->regs[PC] + 4;
+    }
+}
+
+void armemu_add(struct arm_state *state)
+{
+    unsigned int iw;
+    unsigned int rd, rn, rm;
+    int i;
+    iw = *((unsigned int *) state->regs[PC]);
+    if(can_proceed(state,iw)){
+    i = get_I_bit(iw);
+    //printf("I: %d\n", i);
+    rd = get_Rd(iw);
+    rn = get_Rn(iw);
+    if(i == 0){
+        rm = iw & 0xF;
+        state->regs[rd] = state->regs[rn] + state->regs[rm];
+    } else {
+      int imm = iw & 0xFF;
+      state->regs[rd] = state ->regs[rn] + imm;
+    }
+    }
+    if (rd != PC) {
+        state->regs[PC] = state->regs[PC] + 4;
+    }
 }
 
 void armemu_bx(struct arm_state *state)
@@ -104,17 +243,29 @@ void armemu_bx(struct arm_state *state)
     state->regs[PC] = state->regs[rn];
 }
 
+void check_DP_inst(struct arm_state *state, unsigned int iw){
+  if (is_cmp_inst(iw)) {
+      armemu_cmp(state);
+      printf(" gt: %d\n ne: %d\n eq: %d\n",state->gt,state->ne,state->eq);
+  }
+     if (is_bx_inst(iw)) {
+        armemu_bx(state);
+    } else if (is_add_inst(iw)) {
+        armemu_add(state);
+    } else if (is_sub_inst(iw)) {
+      armemu_sub(state);
+    } else if (is_mov_inst(iw)) {
+      armemu_mov(state);
+    }
+  
+}
+
 void armemu_one(struct arm_state *state)
 {
     unsigned int iw;
     
     iw = *((unsigned int *) state->regs[PC]);
-
-    if (is_bx_inst(iw)) {
-        armemu_bx(state);
-    } else if (is_add_inst(iw)) {
-        armemu_add(state);
-    }
+    check_DP_inst(state, iw);
 }
 
 
@@ -133,17 +284,12 @@ int main(int argc, char **argv)
 {
     struct arm_state state;
     unsigned int r;
-    
-    init_arm_state(&state, (unsigned int *) sub, 1, 2, 0, 0);
+    // init_arm_state(&state, (unsigned int *) add, 1,2,0,0);
+    // init_arm_state(&state, (unsigned int *) sub, 1, 2, 0, 0);
+     init_arm_state(&state, (unsigned int *) mov, 0,0,0,0);
+    // init_arm_state(&state, (unsigned int *) cmp,3,1,0,0);
     r = armemu(&state);
     printf("r = %d\n", r);
   
     return 0;
 }
-// .global add
-// .func add
- 
-// add:
-// 	add r0, r0, r1
-// 	bx lr
-// gcc -o armemu armemu.c add.s
