@@ -1,4 +1,3 @@
-
 #include <stdbool.h>
 #include <stdio.h>
 
@@ -16,6 +15,7 @@
 int sum_array_a(unsigned int *a, int n);
 #define PC 15
 
+int branch(void);
 int cmp(int a, int b);
 int add(int a, int b);
 int mov(void);
@@ -361,17 +361,53 @@ void check_DP_inst(struct arm_state *state, unsigned int iw){
   
 }
 
+void armemu_branch(struct arm_state *state){
+  unsigned int iw;
+  signed int imm;
+  unsigned int new_BTA;
+
+  iw = *((unsigned int *) state->regs[PC]);
+  imm = iw & 0xFFFFFF;
+
+  printf("imm: %d\n", imm);
+  if(imm  & 0x800000){
+     new_BTA = 0xFF000000 + imm;
+  } else{
+    new_BTA = imm;
+  }
+
+  new_BTA = new_BTA << 2;
+  printf("new_BTA = %d\n",new_BTA);
+  state->regs[PC] = state ->regs[PC] + 8;
+
+  int offset = state ->regs[PC] + new_BTA;
+  printf("offset = %d\n", offset);
+ 
+  printf("PC:%d\n", state->regs[PC]);
+
+  if(new_BTA > state->regs[PC]){
+    printf("branch backwards\n");
+    state->regs[PC] = offset;
+  }else{
+    printf("branch forward\n");
+    state->regs[PC] = offset;
+  }
+  printf("branch to %d",state->regs[PC]);
+
+}
+
 void check_BR_inst(struct arm_state *state, unsigned int iw){
   unsigned int l_bit;
   l_bit = (iw >> 24) & 0b1;
   if(can_proceed(state, iw)){
   if(l_bit == 0){
     printf("      branch instruction\n");
+    armemu_branch(state);
   } else {
     printf("      branch and link\n");
   }
   }
-  state->regs[PC] = state->regs[PC] + 4;
+  //state->regs[PC] = state->regs[PC] + 4;
 }
 
 void armemu_one(struct arm_state *state)
@@ -417,8 +453,9 @@ int main(int argc, char **argv)
     // init_arm_state(&state, (unsigned int *) sub, 1, 2, 0, 0);
     //  init_arm_state(&state, (unsigned int *) mov, 0,0,0,0);
     // init_arm_state(&state, (unsigned int *) cmp,3,1,0,0);
-    // init_arm_state(&state, (unsigned int *)sum_array_a,(unsigned int) a,5,0,0);
-     init_arm_state(&state, (unsigned int *)ldr,(unsigned int)a,5,0,0);
+    //init_arm_state(&state, (unsigned int *)sum_array_a,(unsigned int) a,5,0,0);
+    //init_arm_state(&state, (unsigned int *)ldr,(unsigned int)a,5,0,0);
+     init_arm_state(&state, (unsigned int *)branch,0,0,0,0);
     r = armemu(&state);
     printf("r = %d\n", r);
   
