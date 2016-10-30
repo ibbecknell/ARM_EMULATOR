@@ -177,7 +177,8 @@ void armemu_cmp(struct arm_state *state){
     }
     if(state->regs[rn] != src2){
       state ->ne = 1;
-    }    
+    }
+    // printf("PC: %d\n", state->regs[PC]);
     state->regs[PC] = state->regs[PC] + 4;
 }
 
@@ -245,12 +246,13 @@ void armemu_add(struct arm_state *state)
     iw = *((unsigned int *) state->regs[PC]);
     if(can_proceed(state,iw)){
     i = get_I_bit(iw);
-    //printf("I: %d\n", i);
+    printf("adding\n");
     rd = get_Rd(iw);
     rn = get_Rn(iw);
     if(i == 0){
         rm = iw & 0xF;
         state->regs[rd] = state->regs[rn] + state->regs[rm];
+	
     } else {
       int imm = iw & 0xFF;
       state->regs[rd] = state ->regs[rn] + imm;
@@ -367,6 +369,7 @@ void armemu_branch(struct arm_state *state){
   unsigned int new_BTA;
 
   iw = *((unsigned int *) state->regs[PC]);
+  if(can_proceed(state,iw)){
   imm = iw & 0xFFFFFF;
 
   printf("imm: %d\n", imm);
@@ -393,43 +396,85 @@ void armemu_branch(struct arm_state *state){
     state->regs[PC] = offset;
   }
   printf("branch to %d",state->regs[PC]);
+  }else{
+  state->regs[PC] = state->regs[PC] + 4;
+  
+  }
 
 }
+void armemu_bl(struct arm_state *state){
+  unsigned int iw;
+  iw = *((unsigned int *) state ->regs[PC]);
+  if(can_proceed(state,iw)){
+      printf("doing bl stuff\n");
+  }
+  else {
+      state->regs[PC] = state->regs[PC]+4;
+  }	   
+	 }
 
 void check_BR_inst(struct arm_state *state, unsigned int iw){
   unsigned int l_bit;
   l_bit = (iw >> 24) & 0b1;
-  if(can_proceed(state, iw)){
-  if(l_bit == 0){
+  //if(can_proceed(state, iw)){
+    //printf("canProceed\n");
+    if(l_bit == 0){
     printf("      branch instruction\n");
+        printf("l_bit: %d\n",l_bit);
     armemu_branch(state);
   } else {
+    printf("l_bit: %d\n",l_bit);
     printf("      branch and link\n");
+    //}
   }
+  // state->regs[PC] = state->regs[PC] + 4;
   }
-  //state->regs[PC] = state->regs[PC] + 4;
-}
+
 
 void armemu_one(struct arm_state *state)
 {
-    unsigned int iw;
+     unsigned int iw;
     
-    iw = *((unsigned int *) state->regs[PC]);
-    if(is_DP_inst(iw)){
-      printf("\n----DATA PROCESSING---\n");
-      check_DP_inst(state, iw);
-      printf("\n----------------------\n");
-    } else if(is_Branch_inst(iw)){
+     iw = *((unsigned int *) state->regs[PC]);
+
+     //if(is_DP_inst(iw)){
+       // printf("\n----DATA PROCESSING---\n");
+       printf("cond_field: %d\n", get_cond_field(iw));
+       printf("function: %d\n", get_inst(iw));
+	// check_DP_inst(state, iw);
+        if (is_cmp_inst(iw)) {
+            printf("====Compare====\n");
+            armemu_cmp(state);
+            printf(" gt: %d\n ne: %d\n eq: %d\n",state->gt,state->ne,state->eq);
+            printf("===============\n");
+        } else if (is_add_inst(iw)) {
+            printf("\n          ====Add====\n");
+            armemu_add(state);
+	    printf("           ===========\n");
+        } else if (is_sub_inst(iw)) {
+            printf("\n          ====Sub====\n");
+            armemu_sub(state);
+            printf("          ===========\n");
+        } else if (is_mov_inst(iw) || is_mvn(iw)) {
+            printf("\n          ====Mov====\n");
+            armemu_mov(state);
+            printf("          ===========\n");
+        
+	
+	//printf("\n----------------------\n");
+      } else if(is_Branch_inst(iw)){
       printf("\n-------BRANCH--------\n");
       check_BR_inst(state,iw);
       printf("\n----------------------\n");
-    } else if(is_Mem_inst(iw)){
-      printf("\n--------MEMORY-------\n");
+      } else if(is_Mem_inst(iw)){
+      //printf("\n--------MEMORY-------\n");
       check_Mem_inst(state,iw);
-      printf("\n----------------------\n");	   
-    } else if (is_bx_inst(iw)) {
+      //printf("\n----------------------\n");	   
+ }
+if (is_bx_inst(iw)) {
         armemu_bx(state);
     }
+     // state->regs[PC] = state->regs[PC]+4;
 }
 
 
@@ -449,13 +494,13 @@ int main(int argc, char **argv)
     struct arm_state state;
     unsigned int r;
     unsigned int a[5] = {1,2,3,4,5};
-    // init_arm_state(&state, (unsigned int *) add, 1,2,0,0);
+    //init_arm_state(&state, (unsigned int *) add, 1,2,0,0);
     // init_arm_state(&state, (unsigned int *) sub, 1, 2, 0, 0);
     //  init_arm_state(&state, (unsigned int *) mov, 0,0,0,0);
     // init_arm_state(&state, (unsigned int *) cmp,3,1,0,0);
-    //init_arm_state(&state, (unsigned int *)sum_array_a,(unsigned int) a,5,0,0);
+    init_arm_state(&state, (unsigned int *)sum_array_a,(unsigned int) a,5,0,0);
     //init_arm_state(&state, (unsigned int *)ldr,(unsigned int)a,5,0,0);
-     init_arm_state(&state, (unsigned int *)branch,0,0,0,0);
+    // init_arm_state(&state, (unsigned int *)branch,0,0,0,0);
     r = armemu(&state);
     printf("r = %d\n", r);
   
