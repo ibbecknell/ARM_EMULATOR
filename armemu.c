@@ -9,12 +9,13 @@
 #define EQ 0
 #define GT 12
 #define NREGS 16
-#define STACK_SIZE 10000
+#define STACK_SIZE 1024
 #define SP 13
 #define LR 14
 
 #define PC 15
 
+int ldrb(char *string, char* sub);
 int ldr_str(void);
 int bl(void);
 int find_str_a(char*str,char*sub);
@@ -35,7 +36,10 @@ struct arm_state {
     unsigned int ne;
     unsigned int gt;
     unsigned char stack[STACK_SIZE];
-  int stack_counter;
+  int num_instructions;
+  int num_DP;
+  int num_Mem;
+  int num_Br;
 };
 
 void init_arm_state(struct arm_state *as, unsigned int *func,
@@ -55,7 +59,6 @@ void init_arm_state(struct arm_state *as, unsigned int *func,
     for (i = 0; i < STACK_SIZE; i++) {
         as->stack[i] = 0;
     }
-    as->stack_counter = 0;
 
     as->regs[PC] = (unsigned int) func;
     as->regs[SP] = (unsigned int) &as->stack[STACK_SIZE];
@@ -65,12 +68,33 @@ void init_arm_state(struct arm_state *as, unsigned int *func,
     as->regs[1] = arg1;
     as->regs[2] = arg2;
     as->regs[3] = arg3;
+
+    as->num_instructions = 0;
+    as->num_DP = 0;
+    as->num_Mem = 0;
+    as->num_Br = 0;
+}
+
+void print_metrics(struct arm_state *state){
+  printf("-------------METRICS---------------\n");
+  printf("Number of:\n");
+  printf("  Branch instructions:  %d\n", state->num_Br);
+  printf("  Memory instructions:  %d\n", state->num_Mem);
+  printf("  Data Processing Instructions:  %d\n",state->num_DP);
+  printf("TOTAL INSTRUCTIONS------------%d\n",state->num_instructions);
+}
+
+void print_regs(struct arm_state *state){
+  int i;
+  for(i = 0; i<NREGS; i++){
+    printf("reg[%d]: %d\n", i, state->regs[i]);
+  }
 }
 
 void print_stack(struct arm_state *state){
   int i;
   printf("STACK\n");
-  for(i = 0; i<STACK_SIZE/10; i++){
+  for(i = 0; i<STACK_SIZE; i++){
     printf("stack[%d] = %d\n",i,state->stack[i]);
   }
 }
@@ -129,7 +153,6 @@ bool is_add_inst(unsigned int iw)
 }
 
 bool is_ldr(unsigned int iw){
-  //printf("%d\n", (iw >> 20) & 0b1);
   return (iw >> 20) & 0b1 == 1;
 }
 
@@ -150,20 +173,19 @@ void clear_cpsr(struct arm_state *state){
 
 bool can_proceed(struct arm_state *state, unsigned int iw){
   unsigned int cond_field = get_cond_field(iw);
-  //printf("     cond_field: %d\n", cond_field);
-  // printf("     state ->ne: %d state->eq: %d state ->gt: %d\n",state->ne,state->eq,state->gt);
   bool can_proceed = false;
+  
   if (cond_field == uncond){
-    printf("      unconditional execution\n");
+    // printf("      unconditional execution\n");
     can_proceed = true;
   } if ((cond_field == NE) && (state->ne == NE)){
-    printf("      Not equal execution\n");
+    //printf("      Not equal execution\n");
     can_proceed = true;
   } if((cond_field == EQ) && (state->eq == EQ)){
-    printf("      Equal execution\n");
+    //printf("      Equal execution\n");
     can_proceed = true;
   }  if(cond_field == state->gt){
-    printf("      Greater than execution\n");
+    //printf("      Greater than execution\n");
     can_proceed = true;
   }
   return can_proceed;
@@ -175,18 +197,22 @@ void armemu_cmp(struct arm_state *state){
     int i;
     int src2;
 
+    state->num_instructions = state->num_instructions + 1;
+    state->num_DP = state->num_DP + 1;
+    
     clear_cpsr(state);
     iw = *((unsigned int *) state->regs[PC]);
     i = get_I_bit(iw);
     rn = get_Rn(iw);
 
+
     if(i == 0){
-         src2 = state->regs[iw & 0xF];
+      src2 = state->regs[iw & 0xF];
     } else {
       src2 = iw & 0xFF;
     }
-     printf("\n Comparing %d and  %d\n",state->regs[rn],src2);
-     if(state->regs[rn] == src2){
+    
+    if(state->regs[rn] == src2){
       state ->eq = 0;		 
     }
     if(state->regs[rn] > src2){
@@ -195,7 +221,7 @@ void armemu_cmp(struct arm_state *state){
     if(state->regs[rn] != src2){
       state ->ne = 1;
     }
-    // printf("PC: %d\n", state->regs[PC]);
+
     state->regs[PC] = state->regs[PC] + 4;
 }
 
@@ -203,28 +229,36 @@ void armemu_mov(struct arm_state *state){
     unsigned int iw;
     unsigned int rd, rn, rm;
     int i;
+
+    state->num_instructions = state->num_instructions + 1;
+    state->num_DP = state->num_DP + 1; 
+
     iw = *((unsigned int *) state->regs[PC]);
+
     if(can_proceed(state,iw)){
-    printf("\n    MOVE INSTRUCTION");
+      //printf("\n    MOVE INSTRUCTION");
     i = get_I_bit(iw);
     rd = get_Rd(iw);
     rn = get_Rn(iw);
 
+    state->num_instructions = state->num_instructions + 1;
+    state->num_DP = state->num_DP;
+    
     if(i == 0){
         rm = iw & 0xF;
-	    if(get_inst(iw) == 15){
-	      state ->regs[rm] = ~state->regs[rm];
-	    }
-	printf("    moving %d into r%d\n",state->regs[rm],rd);
+	if(get_inst(iw) == 15){
+	   state ->regs[rm] = ~state->regs[rm];
+        }
+	//printf("    moving %d into r%d\n",state->regs[rm],rd);
 	state->regs[rd] = state->regs[rm];
-    } else {
-      rm = iw & 0xFF;
-          if(get_inst(iw) == 15){
-	    rm = ~rm;
-	  }
-	printf("    moving %d into r%d\n",rm,rd);
-      state->regs[rd] = rm;
-    }
+        } else {
+            rm = iw & 0xFF;
+            if(get_inst(iw) == 15){
+                rm = ~rm;
+             }
+            printf("    moving %d into r%d\n",rm,rd);
+            state->regs[rd] = rm;
+        }
     }
     
     if (rd != PC) {
@@ -232,37 +266,32 @@ void armemu_mov(struct arm_state *state){
     }
 }
 
-
-
 void armemu_sub(struct arm_state *state){
     unsigned int iw;
     unsigned int rd, rn, rm;
     int i;
+    
     iw = *((unsigned int *) state->regs[PC]);
     if(can_proceed(state,iw)){
-    i = get_I_bit(iw);
-    //printf("I: %d\n", i);
-    rd = get_Rd(iw);
-    rn = get_Rn(iw);
+         state->num_instructions = state->num_instructions + 1;
+	 state->num_DP = state->num_DP + 1;
+    
+        i = get_I_bit(iw);
+        rd = get_Rd(iw);
+        rn = get_Rn(iw);
 
-    if(rd == 13){
-      
-      printf("allocing stack space\n");
-      printf("SP: %d\n", state->stack[state->stack_counter]);
-      state->stack_counter = state->stack_counter + 4;
-      //state->regs[PC] = state->regs[PC] + 4;
-      }
-     if(i == 0){
-        rm = iw & 0xF;
-	printf("subtracting r%d (rn): %d - r%d(rm): %d\n",rn,state->regs[rn],rm,state->regs[rm]);
-        state->regs[rd] = state->regs[rn] - state->regs[rm];
-    } else {
-      int imm = iw & 0xFF;
-      printf("subtracting r%d (rn): %d -  %d\n",rn,state->regs[rn],imm);
-      state->regs[rd] = state ->regs[rn] - imm;
-    }
-    printf("r%d (rd) = %d\n",rd, state->regs[rd]);
-    printf("SP= %d\n", state->regs[SP]);
+    
+        if(i == 0){
+            rm = iw & 0xF;
+	    printf("subtracting r%d (rn): %d - r%d(rm): %d\n",rn,state->regs[rn],rm,state->regs[rm]);
+            state->regs[rd] = state->regs[rn] - state->regs[rm];
+        } else {
+            int imm = iw & 0xFF;
+            printf("subtracting r%d (rn): %d -  %d\n",rn,state->regs[rn],imm);
+            state->regs[rd] = state ->regs[rn] - imm;
+        }
+        printf("r%d (rd) = %d\n",rd, state->regs[rd]);
+        printf("SP= %d\n", state->regs[SP]);
     }
     if (rd != PC) {
         state->regs[PC] = state->regs[PC] + 4;
@@ -281,13 +310,10 @@ void armemu_add(struct arm_state *state)
     rd = get_Rd(iw);
     rn = get_Rn(iw);
 
-    if(rn == 13){
-      printf("deallocating stack space\n");
-      
-      state->stack_counter = state->stack_counter - 4;
-      //state->regs[PC]=state->regs[PC] + 4;
-    }
-    else if(i == 0){
+    state->num_instructions = state->num_instructions + 1;
+    state->num_DP = state->num_DP + 1;
+    
+    if(i == 0){
         rm = iw & 0xF;
         state->regs[rd] = state->regs[rn] + state->regs[rm];
 	printf("adding r%d(rn): %d + r%d(rm): %d to r%d(%d)\n",rn,state->regs[rn],rm,state->regs[rm],rd,state->regs[rd]);
@@ -296,7 +322,7 @@ void armemu_add(struct arm_state *state)
 	printf("adding r%d(rn): %d + %d(imm) to r%d(%d)\n",rn,state->regs[rn],imm,rd,state->regs[rd]);
       state->regs[rd] = state ->regs[rn] + imm;
     }
-    printf("rd(r%d) = %d\n",rd,state->regs[rd]);
+    printf("rd(r%d) = %d\n",rd,&state->regs[rd]);
     }
     if(state->regs[PC] == state->regs[LR]){
       state->regs[PC] = state->regs[PC]+4;
@@ -310,14 +336,13 @@ void armemu_bx(struct arm_state *state)
 {
     unsigned int iw;
     unsigned int rn;
-    printf("bx lr instruction\n");
+    
     iw = *((unsigned int *) state->regs[PC]);
     rn = iw & 0b1111;
-    printf("rn: r%d= %d\n",rn,state->regs[rn]);
-    if(state->regs[LR] != 0){
-      //state->regs[LR] = 0;
-      state->regs[PC] = state->regs[LR];
-    }
+
+    state->num_instructions = state->num_instructions + 1;
+    state->num_Br = state->num_Br + 1;
+    
     state->regs[PC] = state->regs[rn];
 }
 
@@ -328,37 +353,33 @@ bool b_Bit_set(unsigned int iw){
 void armemu_ldrb(struct arm_state *state){
   unsigned int iw;
   unsigned int i,u, rd, rn, src2;
-
+  unsigned int imm;
+  
   iw = *((unsigned int *)state->regs[PC]);
   rn = (iw >> 16) & 0xF;
   rd = (iw >> 12) & 0xF;
   i = (iw >> 25) & 0b1;
   u = (iw >> 23) & 0b1;
 
+   state->num_instructions = state->num_instructions + 1;
+    state->num_Mem = state->num_Mem + 1;
+    
+  
   if(i == 0){
     //immediate value
     src2 = (iw & 0xFF);
-    if(u == 0){
-     //subtract  offset from base
-      printf("loading r%d - %d into r%d\n",rn,src2,rd);
-      //state->regs[rd] = *(unsigned int *)state->regs[rn]+src2;
-    } else {
-     //add offset to base
-      printf("loading r%d(%c) + %d into r%d\n", rn,*(unsigned int*)state->regs[rn], src2,rd);
-      //state->regs[rd] = *(unsigned int*)state->regs[rn]+src2;
-    }
+    //zero extend value
+    imm = src2;
+    unsigned int * tmp = (unsigned int *)(state->regs[rn] + imm);
+    state->regs[rd] = (unsigned char)*tmp;
+    printf("loading %c\n",*tmp);
   } else {
     //register value
     src2 = (iw & 0xF);
-     if(u == 0){
-      //subtract  offset from base
-       printf("loading r%d(%c) - r%d(%c) into r%d\n",rn,*(unsigned int*)state->regs[rn] , src2,state->regs[src2],rd);
-       //state->regs[rd] = *(unsigned int*)state->regs[rn] - state->regs[src2];
-     } else {
-      //add offset to base
-       printf("loading r%d(%c) + r%d(%c) into r%d\n", rn,*(unsigned int*)state->regs[rn],src2,state->regs[src2],rd);
-       //state->regs[rd] = *(unsigned int*)state->regs[rn] + state->regs[src2];
-     }
+    //add offset to base
+    unsigned int * tmp = (unsigned int *)(state->regs[rn] + state->regs[src2]);
+    state->regs[rd] =(unsigned char) *tmp;
+    printf("loading %c\n", *tmp);
   }
   state->regs[PC] = state->regs[PC]+4;
 }
@@ -372,49 +393,33 @@ void armemu_ldr(struct arm_state *state){
   rd = (iw >> 12) & 0xF;
   i = (iw >> 25) & 0b1;
 
-  if(rn == 13){
-    printf("loading %d from the stack to r%d\n", state->stack[state->stack_counter],rd);
-    state->regs[rd] = state->stack[state->stack_counter];
-    printf("r%d (rd) = %d\n",rd,state->regs[rd]);
-    state->stack[state->stack_counter] = 0;
-    // state->stack_counter = state->stack_counter - 4;
-    //state->regs[PC] = state->regs[PC] + 4;
-  } else if(i == 0){
-    src2 = iw & 0xFFF;
-    printf("     loading rn (r%d): %d + imm: %d into rd (r%d)\n",rn,*(unsigned int *) state->regs[rn], src2,rd);
-    state->regs[rd] = *(unsigned int *) state ->regs[rn] + src2;
-  } else {
-    src2 = iw & 0xF;
-    printf("     loading rn (r%d): %d + r%d: %d into rd (r%d)\n",rn,    *(unsigned int *) state->regs[rn], src2,     state->regs[src2],rd);
-    state->regs[rd] = *(unsigned int*)state->regs[rn] + state->regs[src2];
-  }
-  //print_stack(state);
-  printf("r%d (rd) = %d)\n", rd,     state->regs[rd]);
-   if (rd != PC) {
-        state->regs[PC] = state->regs[PC] + 4;
-    }
+  state->num_instructions = state->num_instructions + 1;
+  state->num_Mem = state->num_Mem + 1;
+    
+  unsigned int *temp = (unsigned int *) state->regs[rn];
+  state->regs[rd] =*temp;
   
+  if (rd != PC) {
+     state->regs[PC] = state->regs[PC] + 4;
+  }
 }  
 
 void armemu_str(struct arm_state *state){
-     unsigned int iw;
+  unsigned int iw;
   unsigned int i,rd, rn, src2;
-  printf("in armemu_str\n");
+
+  state->num_instructions = state->num_instructions + 1;
+  state->num_Mem = state->num_Mem + 1;
+
   iw = *((unsigned int *) state->regs[PC]);
   rn = (iw >> 16) & 0xF;
   rd = (iw >> 12) & 0xF;
+ 
+  unsigned int *temp = (unsigned int *) state->regs[rn];
 
-  //state ->stack_counter = state->stack_counter + 4;
-  state->stack[state->stack_counter] = state->regs[rd];
-  printf("     storing rd (r%d): %d  into rn (r%d) at stack[%d]\n",rd, state->regs[rd],rn,state->stack_counter);
-  state->regs[rn] = state ->regs[rd];
+  *temp = state->regs[rd];
 
-  printf("r%d (rn) = %d)\n", rn,     state->regs[rn]);
-    //if (rn != PC) {
-  //print_stack(state);
   state->regs[PC] = state->regs[PC] + 4;
-  printf("increment pc\n");
-     //} 
 }
 
 void check_Mem_inst(struct arm_state *state, unsigned int iw){
@@ -483,6 +488,9 @@ void armemu_branch(struct arm_state *state){
   signed int imm;
   unsigned int new_BTA;
 
+  state->num_instructions = state->num_instructions + 1;
+  state->num_Br = state->num_Br + 1;
+  
   iw = *((unsigned int *) state->regs[PC]);
   if(can_proceed(state,iw)){
   imm = iw & 0xFFFFFF;
@@ -498,10 +506,12 @@ void armemu_branch(struct arm_state *state){
   new_BTA = new_BTA << 2;
   printf("new_BTA = %d\n",new_BTA);
   state->regs[PC] = state ->regs[PC] + 8;
+  
   if(l_bit == 1){
     state->regs[LR] = (state->regs[PC])-4;
-    printf("lr: %d\n",state->regs[LR]);
+    printf("lr: %d\n",(unsigned int)state->regs[LR]);
   }
+  
   int offset = state ->regs[PC] + new_BTA;
   printf("offset = %d\n", offset);
  
@@ -558,12 +568,7 @@ void armemu_one(struct arm_state *state)
     
      iw = *((unsigned int *) state->regs[PC]);
 
-     //if(is_DP_inst(iw)){
-       // printf("\n----DATA PROCESSING---\n");
-       printf("cond_field: %d\n", get_cond_field(iw));
-       printf("function: %d\n", get_inst(iw));
-       printf("opcode: %d\n",get_opcode(iw));
-       printf("is MVN: %d\n",is_mvn(iw));
+     // printf("is MVN: %d\n",is_mvn(iw));
        if(is_DP_inst(iw)){
 	// check_DP_inst(state, iw);
         if (is_cmp_inst(iw)) {
@@ -631,12 +636,14 @@ int main(int argc, char **argv)
     // init_arm_state(&state, (unsigned int *)branch,0,0,0,0);
     //init_arm_state(&state, (unsigned int *)find_max_a,(unsigned int)b,5,0,0);
     //init_arm_state(&state, (unsigned int *)fib_iter_a,10,0,0,0);
-    init_arm_state(&state, (unsigned int *)fib_rec_a,10,0,0,0);
-    //init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int)string,(unsigned int)sub,0,0);
+    //init_arm_state(&state, (unsigned int *)fib_rec_a,9,0,0,0);
+    init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int)string,(unsigned int)sub,0,0);
     //init_arm_state(&state, (unsigned int *)bl,0,0,0,0);
     //init_arm_state(&state, (unsigned int *)ldr_str,0,0,0,0);
+    //init_arm_state(&state, (unsigned int *)ldrb, (unsigned int)string,(unsigned int)sub,0,0);
+    //print_stack(&state);
     r = armemu(&state);
     printf("r = %d\n", r);
-  
+    print_metrics(&state);
     return 0;
 }
