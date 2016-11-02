@@ -420,13 +420,13 @@ void armemu_branch(struct arm_state *state){
     unsigned int iw;
     signed int imm;
     unsigned int new_BTA;
-
-    state->num_instructions = state->num_instructions + 1;
-    state->num_Br = state->num_Br + 1;
   
     iw = *((unsigned int *) state->regs[PC]);
     if(can_proceed(state,iw)){
-        imm = iw & 0xFFFFFF;
+        state->num_instructions = state->num_instructions + 1;
+        state->num_Br = state->num_Br + 1;
+
+	imm = iw & 0xFFFFFF;
         unsigned int l_bit = (iw >> 24) & 0b1;
   
         if(imm  & 0x800000){
