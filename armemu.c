@@ -187,7 +187,6 @@ void armemu_cmp(struct arm_state *state){
     int i;
     int src2;
 
-    state->num_instructions = state->num_instructions + 1;
     state->num_DP = state->num_DP + 1;
     
     clear_cpsr(state);
@@ -226,7 +225,6 @@ void armemu_mov(struct arm_state *state){
         rd = get_Rd(iw);
         rn = get_Rn(iw);
 
-        state->num_instructions = state->num_instructions + 1;
         state->num_DP = state->num_DP;
     
         if(i == 0){
@@ -256,8 +254,7 @@ void armemu_sub(struct arm_state *state){
     
     iw = *((unsigned int *) state->regs[PC]);
     if(can_proceed(state,iw)){
-         state->num_instructions = state->num_instructions + 1;
-	 state->num_DP = state->num_DP + 1;
+        state->num_DP = state->num_DP + 1;
     
         i = get_I_bit(iw);
         rd = get_Rd(iw);
@@ -287,7 +284,6 @@ void armemu_add(struct arm_state *state){
         rd = get_Rd(iw);
         rn = get_Rn(iw);
 
-        state->num_instructions = state->num_instructions + 1;
         state->num_DP = state->num_DP + 1;
     
         if(i == 0){
@@ -308,7 +304,6 @@ void armemu_bx(struct arm_state *state){
     iw = *((unsigned int *) state->regs[PC]);
     rn = iw & 0b1111;
 
-    state->num_instructions = state->num_instructions + 1;
     state->num_Br = state->num_Br + 1;
     
     state->regs[PC] = state->regs[rn];
@@ -329,7 +324,6 @@ void armemu_ldrb(struct arm_state *state){
     i = (iw >> 25) & 0b1;
     u = (iw >> 23) & 0b1;
 
-    state->num_instructions = state->num_instructions + 1;
     state->num_Mem = state->num_Mem + 1;
     
   
@@ -345,7 +339,7 @@ void armemu_ldrb(struct arm_state *state){
         src2 = (iw & 0xF);
         //add offset to base
         unsigned int * tmp = (unsigned int *)(state->regs[rn] + state->regs[src2]);
-        state->regs[rd] =(unsigned char) *tmp;
+        state->regs[rd] = (unsigned char) *tmp;
     }
     state->regs[PC] = state->regs[PC]+4;
 }
@@ -359,7 +353,6 @@ void armemu_ldr(struct arm_state *state){
     rd = (iw >> 12) & 0xF;
     i = (iw >> 25) & 0b1;
 
-    state->num_instructions = state->num_instructions + 1;
     state->num_Mem = state->num_Mem + 1;
     
     unsigned int *temp = (unsigned int *) state->regs[rn];
@@ -374,7 +367,6 @@ void armemu_str(struct arm_state *state){
     unsigned int iw;
     unsigned int i,rd, rn, src2;
 
-    state->num_instructions = state->num_instructions + 1;
     state->num_Mem = state->num_Mem + 1;
 
     iw = *((unsigned int *) state->regs[PC]);
@@ -423,7 +415,6 @@ void armemu_branch(struct arm_state *state){
   
     iw = *((unsigned int *) state->regs[PC]);
     if(can_proceed(state,iw)){
-        state->num_instructions = state->num_instructions + 1;
         state->num_Br = state->num_Br + 1;
 
 	imm = iw & 0xFFFFFF;
@@ -468,318 +459,290 @@ void armemu_one(struct arm_state *state){
 }
 
 
-unsigned int armemu(struct arm_state *state)
-{
-
+unsigned int armemu(struct arm_state *state){
     while (state->regs[PC] != 0) {
         armemu_one(state);
     }
-
+    state->num_instructions = state->num_DP + state->num_Mem + state->num_Br;
     return state->regs[0];
 }
 
 
 void test_sum_array(void){
-  struct arm_state state;
-  unsigned int r;
-  int a[5] = {-1, -4,-6,-3,-9};
-  int len = 5;
-  int j;
-  int thousand[1000];
-  int b[5] = {1,2,5,4,5};
-  int zero[5] = {0,0,0,0,0};
+    struct arm_state state;
+    unsigned int r;
+    int a[5] = {-1, -4,-6,-3,-9};
+    int len = 5;
+    int j;
+    int thousand[1000];
+    int b[5] = {1,2,5,4,5};
+    int zero[5] = {0,0,0,0,0};
 
-  for(j=0;j<1000;j++){
-    thousand[j] = 2;
-  }
+    for(j=0;j<1000;j++){
+        thousand[j] = 2;
+    }
 
-  init_arm_state(&state, (unsigned int *)sum_array_a,(unsigned int) thousand,1000,0,0);
-  r = armemu(&state);
+    init_arm_state(&state, (unsigned int *)sum_array_a,(unsigned int) thousand,1000,0,0);
+    r = armemu(&state);
   
-  printf("\n");
-  printf("\n==============Testing 1000 element array\n");
-  printf("         Array with 1000 two's\n");
-  printf("\nEmulator result = %d\n",r);
-  printf("Assembly result = %d\n",sum_array_a(thousand,1000));
-  printf("\n");
-  print_metrics(&state);
+    printf("\n");
+    printf("\n==============Testing 1000 element array\n");
+    printf("         Array with 1000 two's\n");
+    printf("\nEmulator result = %d\n",r);
+    printf("Assembly result = %d\n",sum_array_a(thousand,1000));
+    printf("\n");
+    print_metrics(&state);
   
-  init_arm_state(&state, (unsigned int *)sum_array_a,(unsigned int) a,len,0,0);
-  r = armemu(&state);
-  printf("==============================================\n");
-  printf("\n==============Testing negative-element array\n");
-  printf("         Input: {-1,-4,-6,-3,-9}, length: %d\n",len);
-  printf("\nEmulator result = %d\n",r);
-  printf("Assembly result = %d\n", sum_array_a(a,len));
-  printf("\n");
-  print_metrics(&state);
-  printf("==============================================\n");
-  init_arm_state(&state, (unsigned int *)sum_array_a,(unsigned int) b,len,0,0);
-  r = armemu(&state);
+    init_arm_state(&state, (unsigned int *)sum_array_a,(unsigned int) a,len,0,0);
+    r = armemu(&state);
+    printf("==============================================\n");
+    printf("\n==============Testing negative-element array\n");
+    printf("         Input: {-1,-4,-6,-3,-9}, length: %d\n",len);
+    printf("\nEmulator result = %d\n",r);
+    printf("Assembly result = %d\n", sum_array_a(a,len));
+    printf("\n");
+    print_metrics(&state);
+    printf("==============================================\n");
+    init_arm_state(&state, (unsigned int *)sum_array_a,(unsigned int) b,len,0,0);
+    r = armemu(&state);
   
-  printf("\n==============Testing positive-element array\n");
-  printf("          Input {1,2,3,4,5}, length: %d\n",len);
-  printf("\nEmulator result = %d\n", r);
-  printf("Assembly result = %d\n", sum_array_a(b,len));
-  printf("\n");
-  print_metrics(&state);
-  printf("==============================================\n");
+    printf("\n==============Testing positive-element array\n");
+    printf("          Input {1,2,3,4,5}, length: %d\n",len);
+    printf("\nEmulator result = %d\n", r);
+    printf("Assembly result = %d\n", sum_array_a(b,len));
+    printf("\n");
+    print_metrics(&state);
+    printf("==============================================\n");
 
-  init_arm_state(&state, (unsigned int *)sum_array_a,(unsigned int) zero,len,0,0);
-  r = armemu(&state);
-  printf("\n");
-  printf("\n==============Testing Zero element array\n");
-  printf("          Input {0,0,0,0,0} length 5\n");
-  printf("\nEmulator result = %d\n", r);
-  printf("Assembly result = %d\n", sum_array_a(zero,len));
-  printf("\n");
-  print_metrics(&state);
-  printf("==============================================\n");
+    init_arm_state(&state, (unsigned int *)sum_array_a,(unsigned int) zero,len,0,0);
+    r = armemu(&state);
+    printf("\n");
+    printf("\n==============Testing Zero element array\n");
+    printf("          Input {0,0,0,0,0} length 5\n");
+    printf("\nEmulator result = %d\n", r);
+    printf("Assembly result = %d\n", sum_array_a(zero,len));
+    printf("\n");
+    print_metrics(&state);
+    printf("==============================================\n");
 }
 
 
 void test_find_max(void){
-  struct arm_state state;
-  unsigned int r;
-  int a[5] = {1,2,4,76,3};
-  int len = 5;
-  int max = 76;
-  int b[5] = {-1, -4,-6,-3,-9};
-  int j;
-  int thousand[1000];
-  int zero[5] = {0,0,0,0,0};
-  for(j=0;j<1000;j++){
-    thousand[j] = j;
-  }
+    struct arm_state state;
+    unsigned int r;
+    int a[5] = {1,2,4,76,3};
+    int len = 5;
+    int max = 76;
+    int b[5] = {-1, -4,-6,-3,-9};
+    int j;
+    int thousand[1000];
+    int zero[5] = {0,0,0,0,0};
+    for(j=0;j<1000;j++){
+        thousand[j] = j;
+    }
 
-  init_arm_state(&state, (unsigned int *)find_max_a,(unsigned int) a,len,0,0);
-  r = armemu(&state);
+    init_arm_state(&state, (unsigned int *)find_max_a,(unsigned int) a,len,0,0);
+    r = armemu(&state);
 
   
-  printf("===============Testing positive-element array\n");
-  printf("       Input: {1,2,4,76,3}\n");
-  printf("Emulator result = %d\n",r);
-  printf("Assembly result = %d\n",find_max_a(a,len));
-  printf("\n");
-  print_metrics(&state);
-  printf("\n==============================================\n");
+    printf("===============Testing positive-element array\n");
+    printf("       Input: {1,2,4,76,3}\n");
+    printf("Emulator result = %d\n",r);
+    printf("Assembly result = %d\n",find_max_a(a,len));
+    printf("\n");
+    print_metrics(&state);
+    printf("\n==============================================\n");
 
-  init_arm_state(&state, (unsigned int *)find_max_a,(unsigned int) b,len,0,0);
-  r = armemu(&state);
+    init_arm_state(&state, (unsigned int *)find_max_a,(unsigned int) b,len,0,0);
+    r = armemu(&state);
   
-  printf("===============Testing negative-element array\n");
-  printf("       Input: {-1,-4,-6,-3,-9}\n");
-  printf("Emulator result = %d\n",r);
-  printf("Assembly = %d\n", len, find_max_a(b,len));
-  printf("\n");
-  print_metrics(&state);
-  printf("\n==============================================\n");
+    printf("===============Testing negative-element array\n");
+    printf("       Input: {-1,-4,-6,-3,-9}\n");
+    printf("Emulator result = %d\n",r);
+    printf("Assembly = %d\n", len, find_max_a(b,len));
+    printf("\n");
+    print_metrics(&state);
+    printf("\n==============================================\n");
 
-  len = 1000;
-  init_arm_state(&state, (unsigned int *)find_max_a,(unsigned int) thousand,len,0,0);
-  r = armemu(&state);
+    len = 1000;
+    init_arm_state(&state, (unsigned int *)find_max_a,(unsigned int) thousand,len,0,0);
+    r = armemu(&state);
   
-  printf("===============Testing 1000-element array of 0-999\n");
-  printf("        Input: 1000 element array 0-999\n");
-  printf("Emulator result = %d\n",r);
-  printf("Assembly result = %d\n", find_max_a(thousand,len));
-  printf("\n");
-  print_metrics(&state);
-  printf("\n==============================================\n");
+    printf("===============Testing 1000-element array of 0-999\n");
+    printf("        Input: 1000 element array 0-999\n");
+    printf("Emulator result = %d\n",r);
+    printf("Assembly result = %d\n", find_max_a(thousand,len));
+    printf("\n");
+    print_metrics(&state);
+    printf("\n==============================================\n");
 
-  len = 5;
-  init_arm_state(&state, (unsigned int *)find_max_a,(unsigned int) zero,len,0,0);
-  r = armemu(&state);
+    len = 5;
+    init_arm_state(&state, (unsigned int *)find_max_a,(unsigned int) zero,len,0,0);
+    r = armemu(&state);
   
-  printf("===============Testing array of zeros\n");
-  printf("       Input: {0,0,0,0,0}\n");
-  printf("Emulator result = %d\n", r);
-  printf("Assembly = %d\n", find_max_a(zero,len));
-  printf("\n");
-  print_metrics(&state);
-  printf("\n==============================================\n");
+    printf("===============Testing array of zeros\n");
+    printf("       Input: {0,0,0,0,0}\n");
+    printf("Emulator result = %d\n", r);
+    printf("Assembly = %d\n", find_max_a(zero,len));
+    printf("\n");
+    print_metrics(&state);
+    printf("\n==============================================\n");
 }
 
 void test_fib_rec(void){
-  struct arm_state state;
-  unsigned int r;
-  int n = 3;
-  int i;
-  printf("Emulator: ");
-  for(i=0;i<20; i++){
-    init_arm_state(&state, (unsigned int *)fib_rec_a,i,0,0,0);
-    r = armemu(&state);
-    printf("%d", r);
-    if(i<19){
-      printf(", ");
+    struct arm_state state;
+    unsigned int r;
+    int n = 3;
+    int i;
+    printf("Emulator: ");
+    for(i=0;i<20; i++){
+        init_arm_state(&state, (unsigned int *)fib_rec_a,i,0,0,0);
+        r = armemu(&state);
+        printf("%d", r);
+        if(i<19){
+            printf(", ");
+        }
     }
-  }
-  printf("\n");
-  printf("Assembly: ");
-  for(i=0;i<20;i++){
-    printf("%d",fib_rec_a(i));
-    if(i<19){
-      printf(", ");
+    printf("\n");
+    printf("Assembly: ");
+    for(i=0;i<20;i++){
+        printf("%d",fib_rec_a(i));
+        if(i<19){
+            printf(", ");
+        }
     }
-  }
-  printf("\n");
+    printf("\n");
 }
 
 void test_fib_iter(void){
-  struct arm_state state;
-  unsigned int r;
-  int i;
-  int n = 3;
+    struct arm_state state;
+    unsigned int r;
+    int i;
+    int n = 3;
 
-  printf("Emulator: ");
-  for(i=0;i<20; i++){
-    init_arm_state(&state, (unsigned int *)fib_iter_a,i,0,0,0);
-    r = armemu(&state);
-    printf("%d", r);
-    if(i<19){
-      printf(", ");
+    printf("Emulator: ");
+    for(i=0;i<20; i++){
+        init_arm_state(&state, (unsigned int *)fib_iter_a,i,0,0,0);
+        r = armemu(&state);
+        printf("%d", r);
+        if(i<19){
+            printf(", ");
+        }
     }
-  }
-  printf("\n");
-  printf("Assembly: ");
-  for(i=0;i<20;i++){
-    printf("%d",fib_iter_a(i));
-    if(i<19){
-      printf(", ");
+    printf("\n");
+    printf("Assembly: ");
+    for(i=0;i<20;i++){
+        printf("%d",fib_iter_a(i));
+        if(i<19){
+            printf(", ");
+        }
     }
-  }
-  printf("\n");
+    printf("\n");
 }
 
 void test_find_str(void){
-  struct arm_state state;
-  unsigned int r;
-  char *string = "horsemouth";
-  char *sub = "th";
-  char *st = "charlie";
-  char *su = "li";
-  int in = find_str_a(string,sub);
-
-  init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
-  r = armemu(&state);
-
-  printf("\n\n==========Test 1:\n");
-  printf("Emulator: first found %s in %s at index %d\n",sub,string,r);
-  printf("Assembly: first found %s in %s at index %d\n",sub, string, in);
-  print_metrics(&state);
-  printf("\n=====================================");
-
-  printf("\n\n==========Test 2:\n");
-  init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) st,(unsigned int)su,0,0);
-  r = armemu(&state);
-  printf("Emulator: first found %s in %s at index %d\n",su, st, r);
-  printf("Assembly: first found %s in %s at index %d\n",su, st, find_str_a(st,su));
-  print_metrics(&state);
-  printf("\n=====================================");
-
-  printf("\n\n==========Test 3:\n");
-  string = "cheese";
-  sub = "ese";
-    init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
-  r = armemu(&state);
-  printf("Emulator: first found %s in %s at index %d\n","ese", "cheese", r);
-  printf("Assembly: first found %s in %s at index %d\n","ese", "cheese", find_str_a("cheese","ese"));
-    print_metrics(&state);
-    printf("\n=====================================");
-
-
-  printf("\n\n==========Test 4:\n");
-  string = "dog";
-  sub = "ese";
-    init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
-  r = armemu(&state);
-  printf("Emulator: first found %s in %s at index %d\n","ese", "dog", r);
-  printf("Assembly: first found %s in %s at index %d\n","ese", "dog", find_str_a("dog","ese"));
-    print_metrics(&state);
-    printf("\n=====================================");
-
-  
-  printf("\n\n==========Test 5:\n");
-  string = "cheese";
-  sub = "es";
-    init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
-  r = armemu(&state);
-  printf("Emulator: first found %s in %s at index %d\n","es", "cheese",r);
-  printf("Assembly: first found %s in %s at index %d\n","es", "cheese", find_str_a("cheese","es"));
-  print_metrics(&state);
-  printf("\n=====================================");
-
-  
-  printf("\n\n==========Test 6:\n");
-  string = "dog";
-  sub = "og";
-  init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
-  r = armemu(&state);
-  printf("Emulator: first found %s in %s at index %d\n","og", "dog",r);
-  printf("Assembly: first found %s in %s at index %d\n","og", "dog", find_str_a("dog","og"));
-  print_metrics(&state);
-  printf("\n=====================================");
-
-  printf("\n\n==========Test 7:\n");
-  string = "doog";
-  sub = "og";
-    init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
-  r = armemu(&state);
-  printf("Emulator: first found %s in %s at index %d\n","og", "doog", r);
-  printf("Assembly: first found %s in %s at index %d\n","og", "doog", find_str_a("doog","og"));
-  print_metrics(&state);
-  printf("\n=====================================");
-
-  printf("\n\n==========Test 8:\n");
-  string = "doog";
-  sub = "";
-  init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
-  r = armemu(&state);
-  printf("Emulator: first found %s in %s at index %d\n","", "doog", r);
-  printf("Assembly: first found %s in %s at index %d\n","", "doog", find_str_a("doog",""));
-  print_metrics(&state);
-  printf("\n=====================================");
-  
-  printf("\n\n==========Test 9:\n");
-  string = "ssdfsddogpoopsjfs";
-  sub = "dogpoop";
-  init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
-  r = armemu(&state);
-  printf("Emulator: first found %s in %s at index %d\n","dogpoop", "ssdfsddogpoopsjfsd", r);
-  printf("Assembly: first found %s in %s at index %d\n","dogpoop", "ssdfsddogpoopsjfsd", find_str_a("ssdfsddogpoopsjfs","dogpoop"));
-  printf("\n");
-
-  print_metrics(&state);
-  printf("\n=====================================\n");
-}
-    
-int main(int argc, char **argv)
-{
     struct arm_state state;
     unsigned int r;
-    unsigned int a[5] = {1,2,3,4,5};
-    unsigned int b[5] = {1, 54, 32, 48, 37};
     char *string = "horsemouth";
     char *sub = "th";
-    //init_arm_state(&state, (unsigned int *) add, 1,2,0,0);
-    // init_arm_state(&state, (unsigned int *) sub, 1, 2, 0, 0);
-    //init_arm_state(&state, (unsigned int *) mov, 0,0,0,0);
-    //init_arm_state(&state, (unsigned int *) cmp,3,1,0,0);
-    //init_arm_state(&state, (unsigned int *)sum_array_a,(unsigned int) a,5,0,0);
-    //init_arm_state(&state, (unsigned int *)ldr,(unsigned int)a,5,0,0);
-    //init_arm_state(&state, (unsigned int *)branch,0,0,0,0);
-    //init_arm_state(&state, (unsigned int *)find_max_a,(unsigned int)b,5,0,0);
-    //init_arm_state(&state, (unsigned int *)fib_iter_a,10,0,0,0);
-    //init_arm_state(&state, (unsigned int *)fib_rec_a,9,0,0,0);
-    //init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int)string,(unsigned int)sub,0,0);
-    //init_arm_state(&state, (unsigned int *)bl,0,0,0,0);
-    //init_arm_state(&state, (unsigned int *)ldr_str,0,0,0,0);
-    //init_arm_state(&state, (unsigned int *)ldrb, (unsigned int)string,(unsigned int)sub,0,0);
-    //print_stack(&state);
-    // r = armemu(&state);
-    //printf("r = %d\n", r);
-    // print_metrics(&state);
+    char *st = "charlie";
+    char *su = "li";
+    int in = find_str_a(string,sub);
 
+    init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
+    r = armemu(&state);
+
+    printf("\n\n==========Test 1:\n");
+    printf("Emulator: first found %s in %s at index %d\n",sub,string,r);
+    printf("Assembly: first found %s in %s at index %d\n",sub, string, in);
+    print_metrics(&state);
+    printf("\n=====================================");
+
+    printf("\n\n==========Test 2:\n");
+    init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) st,(unsigned int)su,0,0);
+    r = armemu(&state);
+    printf("Emulator: first found %s in %s at index %d\n",su, st, r);
+    printf("Assembly: first found %s in %s at index %d\n",su, st, find_str_a(st,su));
+    print_metrics(&state);
+    printf("\n=====================================");
+
+    printf("\n\n==========Test 3:\n");
+    string = "cheese";
+    sub = "ese";
+    init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
+    r = armemu(&state);
+    printf("Emulator: first found %s in %s at index %d\n","ese", "cheese", r);
+    printf("Assembly: first found %s in %s at index %d\n","ese", "cheese", find_str_a("cheese","ese"));
+    print_metrics(&state);
+    printf("\n=====================================");
+
+
+    printf("\n\n==========Test 4:\n");
+    string = "dog";
+    sub = "ese";
+    init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
+    r = armemu(&state);
+    printf("Emulator: first found %s in %s at index %d\n","ese", "dog", r);
+    printf("Assembly: first found %s in %s at index %d\n","ese", "dog", find_str_a("dog","ese"));
+    print_metrics(&state);
+    printf("\n=====================================");
+
+  
+    printf("\n\n==========Test 5:\n");
+    string = "cheese";
+    sub = "es";
+    init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
+    r = armemu(&state);
+    printf("Emulator: first found %s in %s at index %d\n","es", "cheese",r);
+    printf("Assembly: first found %s in %s at index %d\n","es", "cheese", find_str_a("cheese","es"));
+    print_metrics(&state);
+    printf("\n=====================================");
+
+  
+    printf("\n\n==========Test 6:\n");
+    string = "dog";
+    sub = "og";
+    init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
+    r = armemu(&state);
+    printf("Emulator: first found %s in %s at index %d\n","og", "dog",r);
+    printf("Assembly: first found %s in %s at index %d\n","og", "dog", find_str_a("dog","og"));
+    print_metrics(&state);
+    printf("\n=====================================");
+
+    printf("\n\n==========Test 7:\n");
+    string = "doog";
+    sub = "og";
+    init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
+    r = armemu(&state);
+    printf("Emulator: first found %s in %s at index %d\n","og", "doog", r);
+    printf("Assembly: first found %s in %s at index %d\n","og", "doog", find_str_a("doog","og"));
+    print_metrics(&state);
+    printf("\n=====================================");
+
+    printf("\n\n==========Test 8:\n");
+    string = "doog";
+    sub = "";
+    init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
+    r = armemu(&state);
+    printf("Emulator: first found %s in %s at index %d\n","", "doog", r);
+    printf("Assembly: first found %s in %s at index %d\n","", "doog", find_str_a("doog",""));
+    print_metrics(&state);
+    printf("\n=====================================");
+  
+    printf("\n\n==========Test 9:\n");
+    string = "ssdfsddogpoopsjfs";
+    sub = "dogpoop";
+    init_arm_state(&state, (unsigned int *)find_str_a,(unsigned int) string,(unsigned int)sub,0,0);
+    r = armemu(&state);
+    printf("Emulator: first found %s in %s at index %d\n","dogpoop", "ssdfsddogpoopsjfsd", r);
+    printf("Assembly: first found %s in %s at index %d\n","dogpoop", "ssdfsddogpoopsjfsd", find_str_a("ssdfsddogpoopsjfs","dogpoop"));
+    printf("\n");
+
+    print_metrics(&state);
+    printf("\n=====================================\n");
+}
+    
+int main(int argc, char **argv){
     printf("------------Test sum_array------------\n");
     test_sum_array();
     printf("------------Test find_max------------\n");
